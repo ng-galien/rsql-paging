@@ -12,6 +12,13 @@ public record RsqlPageResult<T>(
         boolean last
 ) {
 
+    public RsqlPageResult {
+        if (page < 0) throw new IllegalArgumentException("page must be >= 0");
+        if (size < 1) throw new IllegalArgumentException("size must be >= 1");
+        if (totalElements < 0) throw new IllegalArgumentException("totalElements must be >= 0");
+        content = List.copyOf(content);
+    }
+
     public static <T> RsqlPageResult<T> of(List<T> content, int page, int size, long totalElements) {
         int totalPages = size > 0 ? (int) Math.ceil((double) totalElements / size) : 0;
         boolean first = page == 0;

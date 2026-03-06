@@ -10,6 +10,6 @@ import java.util.List;
 
 public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpecificationExecutor<Product> {
 
-    @Query("SELECT p FROM Product p JOIN FETCH p.category WHERE p.id IN :ids")
+    @Query("SELECT p FROM Product p LEFT JOIN FETCH p.category WHERE p.id IN :ids")
     List<Product> findAllWithCategoryByIdIn(@Param("ids") List<Long> ids);
 }

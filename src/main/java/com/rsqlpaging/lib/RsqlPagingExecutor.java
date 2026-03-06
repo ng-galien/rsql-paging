@@ -6,23 +6,29 @@ import jakarta.persistence.PersistenceUnitUtil;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Order;
+import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.EntityType;
+import jakarta.persistence.metamodel.SingularAttribute;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
-@Component
 public class RsqlPagingExecutor {
+
+    private static final Logger log = LoggerFactory.getLogger(RsqlPagingExecutor.class);
 
     private final EntityManager entityManager;
 
@@ -47,7 +53,7 @@ public class RsqlPagingExecutor {
     /**
      * Paging avec hydratation custom (fetch joins, entity graphs, projections...).
      *
-     * @param hydrator  fonction qui charge les entités à partir d'une liste d'IDs
+     * @param hydrator fonction qui charge les entités à partir d'une liste d'IDs
      */
     public <T, ID> RsqlPageResult<T> findPage(
             Function<List<ID>, List<T>> hydrator,
@@ -57,67 +63,110 @@ public class RsqlPagingExecutor {
             int page,
             int size) {
 
-        // Step 1 — ID query
-        List<ID> allIds = fetchIds(entityClass, rsqlFilter, sort);
+        if (page < 0) {
+            throw new IllegalArgumentException("page must be >= 0, got: " + page);
+        }
+        if (size < 1) {
+            throw new IllegalArgumentException("size must be >= 1, got: " + size);
+        }
 
-        // Step 2 — Découpe en mémoire
-        int total = allIds.size();
-        int fromIndex = Math.min(page * size, total);
-        int toIndex = Math.min(fromIndex + size, total);
-        List<ID> pageIds = allIds.subList(fromIndex, toIndex);
+        var idFieldName = resolveIdFieldName(entityClass);
+
+        // Fallback sort sur l'ID pour garantir un ordre déterministe
+        var effectiveSort = (sort == null || sort.isUnsorted()) ? Sort.by(idFieldName) : sort;
+        validateSortProperties(entityClass, effectiveSort);
+
+        // Step 1 — ID query
+        List<ID> allIds = fetchIds(entityClass, rsqlFilter, effectiveSort);
+
+        // Step 2 — Découpe en mémoire (long arithmetic pour éviter l'overflow)
+        var total = allIds.size();
+        var fromIndex = (int) Math.min((long) page * size, total);
+        var toIndex = Math.min(fromIndex + size, total);
+        var pageIds = allIds.subList(fromIndex, toIndex);
 
         if (pageIds.isEmpty()) {
             return RsqlPageResult.empty(page, size, total);
         }
 
         // Step 3 — Hydratation
-        List<T> entities = hydrator.apply(pageIds);
-        List<T> ordered = reorder(entities, pageIds);
+        var entities = hydrator.apply(pageIds);
+        var ordered = reorder(entities, pageIds);
+
+        if (ordered.size() < pageIds.size()) {
+            log.warn("Hydration returned {} entities for {} requested IDs — possible concurrent deletion",
+                    ordered.size(), pageIds.size());
+        }
 
         return RsqlPageResult.of(ordered, page, size, total);
     }
 
+    private <T> String resolveIdFieldName(Class<T> entityClass) {
+        var entityType = entityManager.getMetamodel().entity(entityClass);
+        if (!entityType.hasSingleIdAttribute()) {
+            throw new UnsupportedOperationException(
+                    "Composite keys (@IdClass/@EmbeddedId) are not supported. Entity: " + entityClass.getName());
+        }
+        return entityType.getId(entityType.getIdType().getJavaType()).getName();
+    }
+
+    private <T> void validateSortProperties(Class<T> entityClass, Sort sort) {
+        var entityType = entityManager.getMetamodel().entity(entityClass);
+        var attributeNames = entityType.getSingularAttributes().stream()
+                .map(SingularAttribute::getName)
+                .collect(Collectors.toUnmodifiableSet());
+
+        sort.forEach(order -> {
+            var property = order.getProperty();
+            var rootProperty = property.contains(".") ? property.substring(0, property.indexOf('.')) : property;
+            if (!attributeNames.contains(rootProperty)) {
+                throw new IllegalArgumentException(
+                        "Invalid sort property: '%s'. Available properties: %s".formatted(property, attributeNames));
+            }
+        });
+    }
+
     @SuppressWarnings("unchecked")
     private <T, ID> List<ID> fetchIds(Class<T> entityClass, String rsqlFilter, Sort sort) {
-        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
-        CriteriaQuery<Object> query = cb.createQuery(Object.class);
-        Root<T> root = query.from(entityClass);
+        var cb = entityManager.getCriteriaBuilder();
+        var query = cb.createQuery(Object.class);
+        var root = query.from(entityClass);
 
-        // Résolution dynamique de l'attribut @Id via le metamodel JPA
-        EntityType<T> entityType = entityManager.getMetamodel().entity(entityClass);
-        String idFieldName = entityType.getId(entityType.getIdType().getJavaType()).getName();
-        query.select(root.get(idFieldName));
+        query.select(root.get(resolveIdFieldName(entityClass)));
 
         // Application du filtre RSQL
         if (rsqlFilter != null && !rsqlFilter.isBlank()) {
             Specification<T> spec = RSQLJPASupport.toSpecification(rsqlFilter);
-            Predicate predicate = spec.toPredicate(root, query, cb);
+            var predicate = spec.toPredicate(root, query, cb);
             if (predicate != null) {
                 query.where(predicate);
             }
         }
 
         // Application du tri
-        if (sort != null && sort.isSorted()) {
-            List<Order> orders = sort.stream()
+        if (sort.isSorted()) {
+            var orders = sort.stream()
                     .map(order -> order.isAscending()
-                            ? cb.asc(root.get(order.getProperty()))
-                            : cb.desc(root.get(order.getProperty())))
+                            ? cb.asc(resolvePath(root, order.getProperty()))
+                            : cb.desc(resolvePath(root, order.getProperty())))
                     .toList();
             query.orderBy(orders);
         }
 
         // Déduplication en Java (DISTINCT + ORDER BY sur colonnes non-sélectionnées pose problème en SQL)
-        List<Object> raw = entityManager.createQuery(query).getResultList();
+        var raw = entityManager.createQuery(query).getResultList();
         return (List<ID>) (List<?>) new LinkedHashSet<>(raw).stream().toList();
     }
 
+    private <T> Path<?> resolvePath(Root<T> root, String property) {
+        return Arrays.stream(property.split("\\."))
+                .reduce((Path<?>) root, Path::get, (a, b) -> b);
+    }
+
     private <T, ID> List<T> reorder(List<T> entities, List<ID> orderedIds) {
-        PersistenceUnitUtil util = entityManager.getEntityManagerFactory().getPersistenceUnitUtil();
-        Map<Object, T> byId = new LinkedHashMap<>();
-        for (T entity : entities) {
-            byId.put(util.getIdentifier(entity), entity);
-        }
+        var util = entityManager.getEntityManagerFactory().getPersistenceUnitUtil();
+        var byId = entities.stream()
+                .collect(Collectors.toMap(util::getIdentifier, Function.identity(), (a, b) -> a, LinkedHashMap::new));
         return orderedIds.stream()
                 .map(byId::get)
                 .filter(Objects::nonNull)
