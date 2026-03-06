@@ -6,8 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Requires Java 21 and Maven (no wrapper)
-mvn compile                        # Compile
-mvn spring-boot:run                # Run (needs PostgreSQL on port 5433)
+mvn compile                        # Compile all modules
+mvn verify                         # Full build with tests + quality checks
+mvn spring-boot:run -pl rsql-paging-demo  # Run demo (needs PostgreSQL on port 5433)
 docker compose up -d               # Start PostgreSQL 17
 docker compose down                # Stop PostgreSQL
 mvn dependency:tree                # Show dependency graph
@@ -15,11 +16,24 @@ mvn dependency:tree                # Show dependency graph
 
 Database: PostgreSQL on `localhost:5433`, credentials `rsqlpaging/rsqlpaging`. Schema is auto-created (`ddl-auto: create-drop`), data loaded from `data.sql`.
 
+## Project Structure
+
+Multi-module Maven project:
+
+```
+rsql-paging/
+├── pom.xml                    (parent — shared plugins & properties)
+├── rsql-paging-lib/           (reusable library JAR)
+│   └── pom.xml
+└── rsql-paging-demo/          (demo Spring Boot app, depends on lib)
+    └── pom.xml
+```
+
 ## Architecture
 
-Two packages with distinct roles:
+Two modules with distinct roles:
 
-### `com.rsqlpaging.lib` — Reusable library
+### `rsql-paging-lib` — Reusable library (`io.github.nggalien.rsqlpaging`)
 
 The core of the project. Designed to be imported as a dependency in other Spring Boot 3 projects via auto-configuration (`META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`).
 
@@ -31,16 +45,18 @@ The core of the project. Designed to be imported as a dependency in other Spring
   Two overloads: one accepting `JpaRepository` (defaults to `findAllById`), one accepting a custom hydrator function. The custom hydrator is the recommended path to avoid N+1/LazyInitializationException with `open-in-view: false`.
 
 - **`RsqlPageResult`** — Immutable record with compact constructor validation. Created only via `of()` / `empty()` factory methods.
-- **`RsqlPagingAutoConfiguration`** — `@AutoConfiguration` registering the executor bean.
-- **`RsqlPagingExceptionHandler`** — `@RestControllerAdvice` mapping `RSQLParserException`, `IllegalArgumentException`, `UnsupportedOperationException` to RFC 7807 `ProblemDetail` (400).
+- **`RsqlPagingProperties`** — `@ConfigurationProperties(prefix = "rsql.paging")` record. Exposes `max-id-count` (default 1M).
+- **`RsqlPagingAutoConfiguration`** — `@AutoConfiguration` registering the executor bean with properties.
+- **`RsqlPagingExceptionHandler`** — `@RestControllerAdvice` mapping exceptions to RFC 7807 `ProblemDetail`: `RSQLParserException`/`IllegalArgumentException`/`UnsupportedOperationException` → 400, `IllegalStateException` (limit exceeded) → 413.
+- **`RsqlFilterBuilder`** — Fluent builder converting legacy query parameters to RSQL filter strings.
 
-### `com.rsqlpaging.demo` — Demo application
+### `rsql-paging-demo` — Demo application (`io.github.nggalien.rsqlpaging.demo`)
 
 Example Spring Boot app showing library usage with `Product`/`Category` entities. Key pattern: the controller passes `productRepository::findAllWithCategoryByIdIn` as hydrator, which uses `LEFT JOIN FETCH` to load the lazy `@ManyToOne` relationship in a single query.
 
 ## Key Design Decisions
 
-- **All IDs in memory**: intentional trade-off. Works well for typical volumes; not suited for millions of rows per query.
+- **All IDs in memory**: intentional trade-off with a hard limit of 1M IDs (configurable via `rsql.paging.max-id-count`). SQL query uses `setMaxResults(maxIdCount + 1)` to cap DB-side. Exceeding the limit returns 413 Payload Too Large.
 - **No DISTINCT in SQL**: `SELECT DISTINCT id ORDER BY non_id_column` fails on some databases. Deduplication happens in Java with `LinkedHashSet` (preserves insertion order).
 - **Composite keys not supported**: `resolveIdFieldName` requires `hasSingleIdAttribute()`. Throws `UnsupportedOperationException` for `@IdClass`/`@EmbeddedId`.
 - **Deterministic fallback sort**: when no sort is provided, automatically sorts by the entity's `@Id` field to guarantee stable pagination.
