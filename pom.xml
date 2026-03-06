@@ -54,6 +54,12 @@
                 <version>${spotless.version}</version>
                 <configuration>
                     <java>
+                        <licenseHeader>
+                            <content>/*
+ * Copyright (c) $YEAR Alexandre Boyer
+ * SPDX-License-Identifier: MIT
+ */</content>
+                        </licenseHeader>
                         <palantirJavaFormat>
                             <version>${palantir-java-format.version}</version>
                         </palantirJavaFormat>

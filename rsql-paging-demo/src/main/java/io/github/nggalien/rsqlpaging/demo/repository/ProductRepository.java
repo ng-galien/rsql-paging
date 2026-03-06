@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 Alexandre Boyer
+ * SPDX-License-Identifier: MIT
+ */
 package io.github.nggalien.rsqlpaging.demo.repository;
 
 import io.github.nggalien.rsqlpaging.demo.entity.Product;
