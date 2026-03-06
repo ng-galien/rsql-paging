@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ng-galien/rsql-paging/actions/workflows/ci.yml/badge.svg)](https://github.com/ng-galien/rsql-paging/actions/workflows/ci.yml)
 [![Java](https://img.shields.io/badge/Java-21-blue)](https://adoptium.net/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4-green)](https://spring.io/projects/spring-boot)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-green)](https://spring.io/projects/spring-boot)
 [![License](https://img.shields.io/github/license/ng-galien/rsql-paging)](LICENSE)
 
 Mini-lib Spring Boot 3 / Java 21 implementing an **ID-first** paging strategy with [RSQL](https://github.com/perplexhub/rsql-jpa-specification) filtering.
