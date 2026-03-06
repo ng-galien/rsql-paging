@@ -28,7 +28,7 @@
         <jacoco.version>0.8.12</jacoco.version>
         <palantir-java-format.version>2.50.0</palantir-java-format.version>
         <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
-        <maven-pmd-plugin.version>3.26.0</maven-pmd-plugin.version>
+        <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
     </properties>
 
     <dependencies>
