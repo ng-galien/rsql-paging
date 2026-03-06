@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   release:
@@ -22,6 +23,7 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
+          server-id: github
 
       - name: Extract version from tag
         id: version
@@ -32,6 +34,11 @@ jobs:
 
       - name: Build & verify
         run: mvn verify --batch-mode --no-transfer-progress
+
+      - name: Publish to GitHub Packages
+        run: mvn deploy -pl rsql-paging-lib --batch-mode --no-transfer-progress -DskipTests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
