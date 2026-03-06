@@ -1,6 +1,6 @@
 # Legacy migration guide
 
-This guide shows how to migrate a traditional query-parameter-based API to RSQL filtering using `RsqlFilterBuilder`.
+This guide shows how to migrate a traditional query-parameter-based API to RSQL filtering and sorting using `RsqlFilterBuilder` and `RsqlSortBuilder`.
 
 ## The problem
 
@@ -18,7 +18,7 @@ Each parameter requires manual handling in the controller and repository — cus
 
 ## Step-by-step migration
 
-### Before: manual filtering
+### Before: manual filtering and sorting
 
 ```java
 @GetMapping
@@ -28,6 +28,8 @@ public Page<Product> findProducts(
         @RequestParam(required = false) BigDecimal maxPrice,
         @RequestParam(required = false) String category,
         @RequestParam(required = false) String search,
+        @RequestParam(required = false) String sortBy,
+        @RequestParam(required = false, defaultValue = "asc") String sortDir,
         Pageable pageable) {
 
     Specification<Product> spec = Specification.where(null);
@@ -46,19 +48,25 @@ public Page<Product> findProducts(
     if (search != null) {
         spec = spec.and((root, query, cb) -> cb.like(root.get("name"), "%" + search + "%"));
     }
-    return productRepository.findAll(spec, pageable);
+
+    Sort sort = Sort.by("id");
+    if (sortBy != null) {
+        sort = Sort.by("desc".equalsIgnoreCase(sortDir)
+                ? Sort.Direction.DESC : Sort.Direction.ASC, sortBy);
+    }
+
+    return productRepository.findAll(spec, PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort));
 }
 ```
 
-### After: RsqlFilterBuilder
+### After: RsqlFilterBuilder + RsqlSortBuilder
 
 ```java
 @GetMapping
 public RsqlPageResult<Product> findProducts(
         @RequestParam Map<String, String> params,
         @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "20") int size,
-        Sort sort) {
+        @RequestParam(defaultValue = "20") int size) {
 
     var filter = RsqlFilterBuilder.from(params)
             .eq("status")
@@ -66,6 +74,11 @@ public RsqlPageResult<Product> findProducts(
             .lte("maxPrice", "price")
             .eq("category", "category.name")
             .like("search", "name")
+            .build();
+
+    var sort = RsqlSortBuilder.from(params)
+            .mapping("sortBy", "sortDir")
+            .defaultSort("id", Sort.Direction.ASC)
             .build();
 
     return rsqlPagingExecutor.findPage(
@@ -79,9 +92,9 @@ public RsqlPageResult<Product> findProducts(
 }
 ```
 
-The API contract stays the same — callers still use `?status=ACTIVE&minPrice=100`. The implementation is now declarative and requires no `Specification` boilerplate.
+The API contract stays the same — callers still use `?status=ACTIVE&minPrice=100&sortBy=price&sortDir=desc`. The implementation is now declarative and requires no `Specification` or manual `Sort` boilerplate.
 
-## Operator reference
+## Filter operator reference
 
 | Method | RSQL output | Use case |
 |--------|-------------|----------|
@@ -98,6 +111,30 @@ The API contract stays the same — callers still use `?status=ACTIVE&minPrice=1
 | `raw(rsql)` | (as-is) | Append a raw RSQL clause |
 
 Each method takes either one argument (param name = field name) or two arguments (param name, RSQL field name).
+
+## Sort builder reference
+
+| Method | Input example | Output |
+|--------|---------------|--------|
+| `asc(param, field)` | Param present → ASC | `Sort.by(ASC, field)` |
+| `desc(param, field)` | Param present → DESC | `Sort.by(DESC, field)` |
+| `mapping(fieldParam, dirParam)` | `?sortBy=price&sortDir=desc` | `Sort.by(DESC, "price")` |
+| `sort(param)` | `?sort=price,desc` | `Sort.by(DESC, "price")` |
+| `defaultSort(field, dir)` | Fallback when no orders added | `Sort.by(dir, field)` |
+
+Each `asc`/`desc` method takes either one argument (param name = field name) or two arguments (param name, sort field name). Missing or blank params are silently skipped.
+
+The `mapping` method is the most common for legacy APIs — it reads the sort field from one param and the direction from another. Direction parsing is case-insensitive and accepts `asc`, `desc`, `ascending`, `descending`. Unknown values default to ASC.
+
+Multiple sort orders are combined in insertion order:
+
+```java
+var sort = RsqlSortBuilder.from(params)
+        .asc("sortByName", "name")       // primary sort
+        .desc("sortByPrice", "price")    // secondary sort
+        .defaultSort("id", Sort.Direction.ASC)
+        .build();
+```
 
 ## Handling blank and missing parameters
 
@@ -165,7 +202,7 @@ GET /api/products?status=ACTIVE&filter=price>=100    # both combined
 
 1. **Add the library** — follow the [integration guide](integration-guide.md)
 2. **Keep existing endpoints** — don't break callers
-3. **Add `RsqlFilterBuilder`** to each endpoint one at a time, replacing `Specification` logic
+3. **Add `RsqlFilterBuilder`** and **`RsqlSortBuilder`** to each endpoint one at a time, replacing `Specification` and manual `Sort` logic
 4. **Optionally expose `filter`** — add a `filter` query param for power users who want raw RSQL
 5. **Remove old `Specification` code** once all endpoints are migrated
 
@@ -187,15 +224,14 @@ The comma-separated value is passed directly to RSQL's `=in=()` operator.
 
 ## Complex example
 
-A real-world order search endpoint combining multiple filter types:
+A real-world order search endpoint combining filters and sort from legacy params:
 
 ```java
 @GetMapping
 public RsqlPageResult<Order> searchOrders(
         @RequestParam Map<String, String> params,
         @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "50") int size,
-        Sort sort) {
+        @RequestParam(defaultValue = "50") int size) {
 
     var filter = RsqlFilterBuilder.from(params)
             .eq("status")
@@ -207,6 +243,11 @@ public RsqlPageResult<Order> searchOrders(
             .out("excludeStatuses", "status")
             .like("search", "reference")
             .buildAndCombine(params.get("filter"));
+
+    var sort = RsqlSortBuilder.from(params)
+            .mapping("sortBy", "sortDir")
+            .defaultSort("createdAt", Sort.Direction.DESC)
+            .build();
 
     return rsqlPagingExecutor.findPage(
             orderRepository::findAllWithAssociationsByIdIn,
@@ -222,11 +263,13 @@ public RsqlPageResult<Order> searchOrders(
 Request:
 
 ```
-GET /api/orders?customer=Acme&from=2024-01-01&to=2024-12-31&status=PAID&priorities=HIGH,URGENT&search=ORD-2024&sort=createdAt,desc&page=0&size=50
+GET /api/orders?customer=Acme&from=2024-01-01&to=2024-12-31&status=PAID&priorities=HIGH,URGENT&search=ORD-2024&sortBy=createdAt&sortDir=desc&page=0&size=50
 ```
 
-Generated RSQL:
+Generated RSQL filter:
 
 ```
 status==PAID;customer.name==Acme;createdAt>=2024-01-01;createdAt<=2024-12-31;priority=in=(HIGH,URGENT);reference==*ORD-2024*
 ```
+
+Generated Sort: `Sort.by(DESC, "createdAt")`

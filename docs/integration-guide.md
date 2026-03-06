@@ -18,15 +18,17 @@ The project must already have `spring-boot-starter-data-jpa` and `spring-boot-st
 
 ## 2. Copy the library files
 
-Copy the 5 files from the `com.rsqlpaging.lib` package into the target project, adapting the package name:
+Copy the 7 files from the `io.github.nggalien.rsqlpaging` package into the target project, adapting the package name:
 
 ```
-src/main/java/com/rsqlpaging/lib/
+src/main/java/io/github/nggalien/rsqlpaging/
 ├── RsqlPagingExecutor.java          # Core — 3-step pagination
 ├── RsqlPageResult.java              # Result record
 ├── RsqlPagingProperties.java        # Configuration (max-id-count)
 ├── RsqlPagingAutoConfiguration.java # Spring Boot auto-configuration
-└── RsqlPagingExceptionHandler.java  # Error handling → ProblemDetail
+├── RsqlPagingExceptionHandler.java  # Error handling → ProblemDetail
+├── RsqlFilterBuilder.java           # Legacy query params → RSQL filter
+└── RsqlSortBuilder.java             # Legacy query params → Spring Sort
 ```
 
 ### Adapt the package
@@ -150,7 +152,7 @@ The ID query uses `setMaxResults(maxIdCount + 1)` on the SQL side to never load 
 ## Integration checklist
 
 - [ ] `rsql-jpa-spring-boot-starter` dependency added to pom.xml
-- [ ] 5 library files copied with the correct package
+- [ ] 7 library files copied with the correct package
 - [ ] Auto-configuration registered (imports or @Configuration)
 - [ ] Hydration method with `LEFT JOIN FETCH` in the repository
 - [ ] Controller using `rsqlPagingExecutor.findPage(...)`

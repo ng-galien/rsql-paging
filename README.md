@@ -144,6 +144,29 @@ var filter = RsqlFilterBuilder.from(params)
 
 Missing or blank params are silently skipped. See the [migration guide](docs/legacy-migration-guide.md) for detailed examples.
 
+### `RsqlSortBuilder`
+
+Fluent builder that converts legacy query parameters to a Spring `Sort`. Companion to `RsqlFilterBuilder` for fully migrating legacy APIs without changing the client contract.
+
+```java
+var sort = RsqlSortBuilder.from(params)
+        .mapping("sortBy", "sortDir")            // ?sortBy=price&sortDir=desc → Sort.by(DESC, "price")
+        .defaultSort("id", Sort.Direction.ASC)   // fallback if no sort param
+        .build();
+```
+
+**Methods:**
+
+| Method | Input | Output |
+|--------|-------|--------|
+| `asc(param, field)` | Param present → ASC | `Sort.by(ASC, field)` |
+| `desc(param, field)` | Param present → DESC | `Sort.by(DESC, field)` |
+| `mapping(fieldParam, dirParam)` | `?sortBy=price&sortDir=desc` | `Sort.by(DESC, "price")` |
+| `sort(param)` | `?sort=price,desc` | `Sort.by(DESC, "price")` |
+| `defaultSort(field, dir)` | Fallback when no orders added | `Sort.by(dir, field)` |
+
+Missing or blank params are silently skipped. Multiple sort orders are combined in insertion order. See the [migration guide](docs/legacy-migration-guide.md) for detailed examples.
+
 ### RSQL syntax
 
 | Operator | Meaning |
