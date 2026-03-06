@@ -1,0 +1,5 @@
+jdk:
+  - 21
+
+install:
+  - mvn install -pl rsql-paging-lib -am -DskipTests --batch-mode --no-transfer-progress

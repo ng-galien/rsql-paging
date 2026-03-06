@@ -1,12 +1,45 @@
 # Integration guide
 
-Two ways to integrate rsql-paging into an existing Spring Boot 3 project: as a Maven dependency from GitHub Packages, or by copying the source files.
+Three ways to integrate rsql-paging into an existing Spring Boot 3 project.
 
-## Option A: Maven dependency (GitHub Packages)
+## Option A: Maven dependency (JitPack) — recommended
+
+No authentication required. JitPack builds directly from GitHub tags.
+
+### 1. Add the repository and dependency
+
+In your project's `pom.xml`:
+
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+
+<dependencies>
+    <dependency>
+        <groupId>com.github.ng-galien</groupId>
+        <artifactId>rsql-paging</artifactId>
+        <version>v0.3.0</version>
+    </dependency>
+</dependencies>
+```
+
+The library pulls in `rsql-jpa-spring-boot-starter` transitively. Your project must already have `spring-boot-starter-data-jpa` and `spring-boot-starter-web`.
+
+Auto-configuration is automatic — `RsqlPagingExecutor` is registered as a bean via Spring Boot's `AutoConfiguration.imports`.
+
+Skip to [step 3: Create the hydration method](#3-create-the-hydration-method-in-the-repository).
+
+## Option B: Maven dependency (GitHub Packages)
+
+> **Note**: GitHub Packages requires authentication even for public repositories.
 
 ### 1. Authentication
 
-GitHub Packages requires authentication even for reading. Create a [personal access token](https://github.com/settings/tokens) with `read:packages` scope, then add it to `~/.m2/settings.xml`:
+Create a [personal access token](https://github.com/settings/tokens) with `read:packages` scope, then add it to `~/.m2/settings.xml`:
 
 ```xml
 <settings>
@@ -47,7 +80,7 @@ Auto-configuration is automatic — `RsqlPagingExecutor` is registered as a bean
 
 Skip to [step 3: Create the hydration method](#3-create-the-hydration-method-in-the-repository).
 
-## Option B: Copy-based integration
+## Option C: Copy-based integration
 
 ### 1. Maven dependency
 

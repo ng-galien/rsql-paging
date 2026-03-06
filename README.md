@@ -201,5 +201,5 @@ rsql:
 
 ## Integration
 
-- [Integration guide](docs/integration-guide.md) — Maven dependency (GitHub Packages) or copy-based
+- [Integration guide](docs/integration-guide.md) — Maven dependency (JitPack, GitHub Packages) or copy-based
 - [Legacy migration guide](docs/legacy-migration-guide.md) — migrate query-param APIs to RSQL with `RsqlFilterBuilder` and `RsqlSortBuilder`
