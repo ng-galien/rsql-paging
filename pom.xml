@@ -19,7 +19,7 @@
 
     <properties>
         <java.version>21</java.version>
-        <rsql-jpa.version>6.0.23</rsql-jpa.version>
+        <rsql-jpa.version>6.0.34</rsql-jpa.version>
         <spotless.version>3.3.0</spotless.version>
         <spotbugs.version>4.9.3</spotbugs.version>
         <spotbugs-maven.version>4.9.3.0</spotbugs-maven.version>
