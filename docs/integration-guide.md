@@ -1,24 +1,71 @@
-# Integration guide (copy-based)
+# Integration guide
 
-This guide explains how to integrate the rsql-paging library into an existing Spring Boot 3 project by copying the source files directly.
+Two ways to integrate rsql-paging into an existing Spring Boot 3 project: as a Maven dependency from GitHub Packages, or by copying the source files.
 
-## 1. Maven dependency
+## Option A: Maven dependency (GitHub Packages)
 
-Add the rsql-jpa-specification dependency to the target project's `pom.xml`:
+### 1. Authentication
+
+GitHub Packages requires authentication even for reading. Create a [personal access token](https://github.com/settings/tokens) with `read:packages` scope, then add it to `~/.m2/settings.xml`:
+
+```xml
+<settings>
+  <servers>
+    <server>
+      <id>github</id>
+      <username>YOUR_GITHUB_USERNAME</username>
+      <password>YOUR_GITHUB_TOKEN</password>
+    </server>
+  </servers>
+</settings>
+```
+
+### 2. Add the repository and dependency
+
+In your project's `pom.xml`:
+
+```xml
+<repositories>
+    <repository>
+        <id>github</id>
+        <url>https://maven.pkg.github.com/ng-galien/rsql-paging</url>
+    </repository>
+</repositories>
+
+<dependencies>
+    <dependency>
+        <groupId>io.github.nggalien</groupId>
+        <artifactId>rsql-paging</artifactId>
+        <version>0.3.0</version>
+    </dependency>
+</dependencies>
+```
+
+The library pulls in `rsql-jpa-spring-boot-starter` transitively. Your project must already have `spring-boot-starter-data-jpa` and `spring-boot-starter-web`.
+
+Auto-configuration is automatic — `RsqlPagingExecutor` is registered as a bean via Spring Boot's `AutoConfiguration.imports`.
+
+Skip to [step 3: Create the hydration method](#3-create-the-hydration-method-in-the-repository).
+
+## Option B: Copy-based integration
+
+### 1. Maven dependency
+
+Add the rsql-jpa-specification dependency to your `pom.xml`:
 
 ```xml
 <dependency>
     <groupId>io.github.perplexhub</groupId>
     <artifactId>rsql-jpa-spring-boot-starter</artifactId>
-    <version>6.0.23</version>
+    <version>6.0.34</version>
 </dependency>
 ```
 
-The project must already have `spring-boot-starter-data-jpa` and `spring-boot-starter-web`.
+Your project must already have `spring-boot-starter-data-jpa` and `spring-boot-starter-web`.
 
-## 2. Copy the library files
+### 2. Copy the library files
 
-Copy the 7 files from the `io.github.nggalien.rsqlpaging` package into the target project, adapting the package name:
+Copy the 7 files from the `io.github.nggalien.rsqlpaging` package into your project, adapting the package name:
 
 ```
 src/main/java/io/github/nggalien/rsqlpaging/
@@ -31,15 +78,15 @@ src/main/java/io/github/nggalien/rsqlpaging/
 └── RsqlSortBuilder.java             # Legacy query params → Spring Sort
 ```
 
-### Adapt the package
+#### Adapt the package
 
 Rename the package in all files. For example, for a project `com.myproject`:
 
 ```
-com.rsqlpaging.lib → com.myproject.rsqlpaging
+io.github.nggalien.rsqlpaging → com.myproject.rsqlpaging
 ```
 
-### Register auto-configuration
+#### Register auto-configuration
 
 Create (or update) the file:
 
@@ -151,9 +198,9 @@ The ID query uses `setMaxResults(maxIdCount + 1)` on the SQL side to never load 
 
 ## Integration checklist
 
-- [ ] `rsql-jpa-spring-boot-starter` dependency added to pom.xml
-- [ ] 7 library files copied with the correct package
-- [ ] Auto-configuration registered (imports or @Configuration)
+- [ ] Library added (Maven dependency or 7 files copied with correct package)
+- [ ] Auto-configuration registered (automatic with Maven, or via imports/`@Configuration` for copy)
+- [ ] `rsql-jpa-spring-boot-starter` available (transitive with Maven, or explicit dependency for copy)
 - [ ] Hydration method with `LEFT JOIN FETCH` in the repository
 - [ ] Controller using `rsqlPagingExecutor.findPage(...)`
 - [ ] `open-in-view: false` in application.yml
