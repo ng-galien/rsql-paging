@@ -4,7 +4,9 @@
  */
 package io.github.nggalien.rsqlpaging;
 
+import io.github.perplexhub.rsql.QuerySupport;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import org.springframework.data.domain.Sort;
@@ -33,6 +35,7 @@ public final class RsqlPageQuery<T, ID> {
     private int page;
     private int size = 20;
     private UnaryOperator<Specification<T>> specCustomizer = UnaryOperator.identity();
+    private Consumer<QuerySupport.QuerySupportBuilder> rsqlCustomizer;
     private Function<List<ID>, List<T>> hydrator;
 
     RsqlPageQuery(RsqlPagingExecutor executor, Class<T> entityClass) {
@@ -65,6 +68,12 @@ public final class RsqlPageQuery<T, ID> {
         return this;
     }
 
+    /** Customize the RSQL QuerySupport (whitelist, blacklist, property mapping, join hints...). */
+    public RsqlPageQuery<T, ID> rsql(Consumer<QuerySupport.QuerySupportBuilder> customizer) {
+        this.rsqlCustomizer = customizer;
+        return this;
+    }
+
     /** Set a custom hydrator function (fetch joins, entity graphs, projections...). */
     public RsqlPageQuery<T, ID> hydrator(Function<List<ID>, List<T>> hydratorFunction) {
         this.hydrator = hydratorFunction;
@@ -82,6 +91,6 @@ public final class RsqlPageQuery<T, ID> {
         if (hydrator == null) {
             throw new IllegalStateException("No hydrator set. Call hydrator() or repository() before execute().");
         }
-        return executor.findPage(hydrator, entityClass, filter, sort, page, size, specCustomizer);
+        return executor.executePage(hydrator, entityClass, filter, sort, page, size, specCustomizer, rsqlCustomizer);
     }
 }

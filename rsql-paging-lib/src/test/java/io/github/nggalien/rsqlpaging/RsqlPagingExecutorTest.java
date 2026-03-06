@@ -509,6 +509,56 @@ class RsqlPagingExecutorTest {
         assertThat(result.page()).isZero();
     }
 
+    // --- RSQL QuerySupport customizer ---
+
+    @Test
+    void query_withRsqlBlacklist_shouldRejectBlacklistedField() {
+        var q = executor.<TestEntity, Long>query(TestEntity.class)
+                .repository(testEntityRepository)
+                .filter("price>100")
+                .sort(Sort.by("name"))
+                .page(0, 10)
+                .rsql(qb -> qb.propertyBlacklist(java.util.Map.of(TestEntity.class, java.util.List.of("price"))));
+
+        assertThatThrownBy(q::execute).isInstanceOf(Exception.class);
+    }
+
+    @Test
+    void query_withRsqlWhitelist_shouldAllowWhitelistedField() {
+        var result = executor.<TestEntity, Long>query(TestEntity.class)
+                .repository(testEntityRepository)
+                .filter("name==Laptop")
+                .sort(Sort.by("name"))
+                .page(0, 10)
+                .rsql(qb -> qb.propertyWhitelist(java.util.Map.of(TestEntity.class, java.util.List.of("name"))))
+                .execute();
+
+        assertThat(result.totalElements()).isEqualTo(1);
+        assertThat(result.content().get(0).getName()).isEqualTo("Laptop");
+    }
+
+    @Test
+    void query_withRsqlWhitelist_shouldRejectNonWhitelistedField() {
+        var q = executor.<TestEntity, Long>query(TestEntity.class)
+                .repository(testEntityRepository)
+                .filter("price>100")
+                .sort(Sort.by("name"))
+                .page(0, 10)
+                .rsql(qb -> qb.propertyWhitelist(java.util.Map.of(TestEntity.class, java.util.List.of("name"))));
+
+        assertThatThrownBy(q::execute).isInstanceOf(Exception.class);
+    }
+
+    @Test
+    void query_withRsqlCustomizerAndNoFilter_shouldWork() {
+        var result = executor.<TestEntity, Long>query(TestEntity.class)
+                .repository(testEntityRepository)
+                .rsql(qb -> qb.propertyBlacklist(java.util.Map.of(TestEntity.class, java.util.List.of("price"))))
+                .execute();
+
+        assertThat(result.totalElements()).isEqualTo(5);
+    }
+
     // --- Hydrator returning duplicate entities should keep first occurrence ---
 
     @Test

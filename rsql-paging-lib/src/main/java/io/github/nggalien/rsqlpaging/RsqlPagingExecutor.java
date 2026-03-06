@@ -4,6 +4,7 @@
  */
 package io.github.nggalien.rsqlpaging;
 
+import io.github.perplexhub.rsql.QuerySupport;
 import io.github.perplexhub.rsql.RSQLJPASupport;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.Path;
@@ -13,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
@@ -95,6 +97,20 @@ public class RsqlPagingExecutor {
             int size,
             UnaryOperator<Specification<T>> specCustomizer) {
 
+        return executePage(hydrator, entityClass, rsqlFilter, sort, page, size, specCustomizer, null);
+    }
+
+    /** Package-private entry point used by RsqlPageQuery to pass all options including rsqlCustomizer. */
+    <T, ID> RsqlPageResult<T> executePage(
+            Function<List<ID>, List<T>> hydrator,
+            Class<T> entityClass,
+            String rsqlFilter,
+            Sort sort,
+            int page,
+            int size,
+            UnaryOperator<Specification<T>> specCustomizer,
+            Consumer<QuerySupport.QuerySupportBuilder> rsqlCustomizer) {
+
         if (page < 0) {
             throw new IllegalArgumentException("page must be >= 0, got: " + page);
         }
@@ -103,15 +119,11 @@ public class RsqlPagingExecutor {
         }
 
         var idFieldName = resolveIdFieldName(entityClass);
-
-        // Fallback sort on ID to guarantee deterministic ordering
         var effectiveSort = (sort == null || sort.isUnsorted()) ? Sort.by(idFieldName) : sort;
         validateSortProperties(entityClass, effectiveSort);
 
-        // Step 1 — ID query
-        List<ID> allIds = fetchIds(entityClass, rsqlFilter, effectiveSort, specCustomizer);
+        List<ID> allIds = fetchIds(entityClass, rsqlFilter, effectiveSort, specCustomizer, rsqlCustomizer);
 
-        // Step 2 — In-memory slicing (long arithmetic to avoid overflow)
         var total = allIds.size();
         var fromIndex = (int) Math.min((long) page * size, total);
         var toIndex = Math.min(fromIndex + size, total);
@@ -121,7 +133,6 @@ public class RsqlPagingExecutor {
             return RsqlPageResult.empty(page, size, total);
         }
 
-        // Step 3 — Hydration
         var entities = hydrator.apply(pageIds);
         var ordered = reorder(entities, pageIds);
 
@@ -162,7 +173,11 @@ public class RsqlPagingExecutor {
 
     @SuppressWarnings("unchecked")
     private <T, ID> List<ID> fetchIds(
-            Class<T> entityClass, String rsqlFilter, Sort sort, UnaryOperator<Specification<T>> specCustomizer) {
+            Class<T> entityClass,
+            String rsqlFilter,
+            Sort sort,
+            UnaryOperator<Specification<T>> specCustomizer,
+            Consumer<QuerySupport.QuerySupportBuilder> rsqlCustomizer) {
         var cb = entityManager.getCriteriaBuilder();
         var query = cb.createQuery(Object.class);
         var root = query.from(entityClass);
@@ -172,7 +187,13 @@ public class RsqlPagingExecutor {
         // Apply RSQL filter + custom specification
         Specification<T> spec = Specification.where(null);
         if (rsqlFilter != null && !rsqlFilter.isBlank()) {
-            spec = spec.and(RSQLJPASupport.toSpecification(rsqlFilter));
+            if (rsqlCustomizer != null) {
+                var qb = QuerySupport.builder().rsqlQuery(rsqlFilter);
+                rsqlCustomizer.accept(qb);
+                spec = spec.and(RSQLJPASupport.toSpecification(qb.build()));
+            } else {
+                spec = spec.and(RSQLJPASupport.toSpecification(rsqlFilter));
+            }
         }
         spec = specCustomizer.apply(spec);
         var predicate = spec.toPredicate(root, query, cb);

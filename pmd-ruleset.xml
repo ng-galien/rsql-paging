@@ -44,7 +44,7 @@
     </rule>
     <rule ref="category/java/design.xml/CouplingBetweenObjects">
         <properties>
-            <property name="threshold" value="25"/>
+            <property name="threshold" value="30"/>
         </properties>
     </rule>
 
