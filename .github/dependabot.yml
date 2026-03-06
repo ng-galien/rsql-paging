@@ -7,6 +7,13 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - dependencies
+    ignore:
+      - dependency-name: "org.springframework.boot:spring-boot-starter-parent"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "io.github.perplexhub:rsql-jpa-spring-boot-starter"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "net.sourceforge.pmd:pmd-*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
