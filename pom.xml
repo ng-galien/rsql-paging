@@ -18,6 +18,14 @@
     <name>rsql-paging-parent</name>
     <description>Parent POM for rsql-paging multi-module project</description>
 
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <modules>
         <module>rsql-paging-lib</module>
         <module>rsql-paging-demo</module>
