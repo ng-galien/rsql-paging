@@ -14,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,11 +39,29 @@ public class RsqlPagingExecutor {
         this.maxIdCount = maxIdCount;
     }
 
+    /** Start building a fluent paging query for the given entity class. */
+    public <T, ID> RsqlPageQuery<T, ID> query(Class<T> entityClass) {
+        return new RsqlPageQuery<>(this, entityClass);
+    }
+
     /** Paging with default hydration (findAllById). */
     public <T, ID> RsqlPageResult<T> findPage(
             JpaRepository<T, ID> repository, Class<T> entityClass, String rsqlFilter, Sort sort, int page, int size) {
 
         return findPage(repository::findAllById, entityClass, rsqlFilter, sort, page, size);
+    }
+
+    /** Paging with default hydration and a specification customizer. */
+    public <T, ID> RsqlPageResult<T> findPage(
+            JpaRepository<T, ID> repository,
+            Class<T> entityClass,
+            String rsqlFilter,
+            Sort sort,
+            int page,
+            int size,
+            UnaryOperator<Specification<T>> specCustomizer) {
+
+        return findPage(repository::findAllById, entityClass, rsqlFilter, sort, page, size, specCustomizer);
     }
 
     /**
@@ -58,6 +77,24 @@ public class RsqlPagingExecutor {
             int page,
             int size) {
 
+        return findPage(hydrator, entityClass, rsqlFilter, sort, page, size, UnaryOperator.identity());
+    }
+
+    /**
+     * Paging with custom hydration and a specification customizer.
+     *
+     * @param hydrator function that loads entities from a list of IDs
+     * @param specCustomizer operator to add extra where clauses (e.g. tenant filter, security)
+     */
+    public <T, ID> RsqlPageResult<T> findPage(
+            Function<List<ID>, List<T>> hydrator,
+            Class<T> entityClass,
+            String rsqlFilter,
+            Sort sort,
+            int page,
+            int size,
+            UnaryOperator<Specification<T>> specCustomizer) {
+
         if (page < 0) {
             throw new IllegalArgumentException("page must be >= 0, got: " + page);
         }
@@ -72,7 +109,7 @@ public class RsqlPagingExecutor {
         validateSortProperties(entityClass, effectiveSort);
 
         // Step 1 — ID query
-        List<ID> allIds = fetchIds(entityClass, rsqlFilter, effectiveSort);
+        List<ID> allIds = fetchIds(entityClass, rsqlFilter, effectiveSort, specCustomizer);
 
         // Step 2 — In-memory slicing (long arithmetic to avoid overflow)
         var total = allIds.size();
@@ -124,17 +161,23 @@ public class RsqlPagingExecutor {
     }
 
     @SuppressWarnings("unchecked")
-    private <T, ID> List<ID> fetchIds(Class<T> entityClass, String rsqlFilter, Sort sort) {
+    private <T, ID> List<ID> fetchIds(
+            Class<T> entityClass, String rsqlFilter, Sort sort, UnaryOperator<Specification<T>> specCustomizer) {
         var cb = entityManager.getCriteriaBuilder();
         var query = cb.createQuery(Object.class);
         var root = query.from(entityClass);
 
         query.select(root.get(resolveIdFieldName(entityClass)));
 
-        // Apply RSQL filter
+        // Apply RSQL filter + custom specification
+        Specification<T> spec = Specification.where(null);
         if (rsqlFilter != null && !rsqlFilter.isBlank()) {
-            Specification<T> spec = RSQLJPASupport.toSpecification(rsqlFilter);
-            query.where(spec.toPredicate(root, query, cb));
+            spec = spec.and(RSQLJPASupport.toSpecification(rsqlFilter));
+        }
+        spec = specCustomizer.apply(spec);
+        var predicate = spec.toPredicate(root, query, cb);
+        if (predicate != null) {
+            query.where(predicate);
         }
 
         // Apply sorting — sort is always present thanks to the fallback in findPage

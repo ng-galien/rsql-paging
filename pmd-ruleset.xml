@@ -10,9 +10,6 @@
     <!-- Best practices -->
     <rule ref="category/java/bestpractices.xml">
         <exclude name="GuardLogStatement"/>
-        <exclude name="JUnitTestContainsTooManyAsserts"/>
-        <exclude name="JUnitAssertionsShouldIncludeMessage"/>
-        <exclude name="JUnitTestsShouldIncludeAssert"/>
     </rule>
 
     <!-- Code style -->
@@ -43,12 +40,16 @@
         <exclude name="AvoidCatchingGenericException"/>
         <exclude name="UseUtilityClass"/>
         <exclude name="DataClass"/>
+        <exclude name="CouplingBetweenObjects"/>
+    </rule>
+    <rule ref="category/java/design.xml/CouplingBetweenObjects">
+        <properties>
+            <property name="threshold" value="25"/>
+        </properties>
     </rule>
 
     <!-- Error-prone -->
     <rule ref="category/java/errorprone.xml">
-        <exclude name="BeanMembersShouldSerialize"/>
-        <exclude name="DataflowAnomalyAnalysis"/>
         <exclude name="AvoidLiteralsInIfCondition"/>
         <exclude name="AvoidFieldNameMatchingMethodName"/>
     </rule>

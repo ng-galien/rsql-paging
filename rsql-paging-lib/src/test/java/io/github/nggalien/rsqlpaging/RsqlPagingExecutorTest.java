@@ -371,6 +371,144 @@ class RsqlPagingExecutorTest {
         assertThat(result.last()).isFalse();
     }
 
+    // --- Specification customizer ---
+
+    @Test
+    void findPage_withSpecCustomizer_shouldAddWhereClause() {
+        var result = executor.findPage(
+                testEntityRepository,
+                TestEntity.class,
+                "",
+                Sort.by("name"),
+                0,
+                10,
+                spec -> spec.and((root, query, cb) -> cb.greaterThan(root.get("price"), 100)));
+
+        assertThat(result.totalElements()).isEqualTo(3);
+        assertThat(result.content().stream().map(TestEntity::getName).toList())
+                .containsExactly("Laptop", "Phone", "Tablet");
+    }
+
+    @Test
+    void findPage_withSpecCustomizerAndRsqlFilter_shouldCombineBoth() {
+        var result = executor.findPage(
+                testEntityRepository,
+                TestEntity.class,
+                "price>100",
+                Sort.by("name"),
+                0,
+                10,
+                spec -> spec.and((root, query, cb) -> cb.notEqual(root.get("name"), "Phone")));
+
+        assertThat(result.totalElements()).isEqualTo(2);
+        assertThat(result.content().stream().map(TestEntity::getName).toList()).containsExactly("Laptop", "Tablet");
+    }
+
+    @Test
+    void findPage_withSpecCustomizerAndCustomHydrator_shouldWork() {
+        var result = executor.findPage(
+                testEntityRepository::findAllWithCategoryByIdIn,
+                TestEntity.class,
+                "",
+                Sort.by("name"),
+                0,
+                10,
+                spec -> spec.and(
+                        (root, query, cb) -> cb.equal(root.get("category").get("name"), "Electronics")));
+
+        assertThat(result.totalElements()).isEqualTo(3);
+        assertThat(result.content().get(0).getCategory().getName()).isEqualTo("Electronics");
+    }
+
+    @Test
+    void findPage_withIdentitySpecCustomizer_shouldReturnAll() {
+        var result =
+                executor.findPage(testEntityRepository, TestEntity.class, "", Sort.by("name"), 0, 10, spec -> spec);
+
+        assertThat(result.totalElements()).isEqualTo(5);
+    }
+
+    @Test
+    void findPage_defaultHydrationWithSpecCustomizer_shouldWork() {
+        var result = executor.findPage(
+                testEntityRepository,
+                TestEntity.class,
+                "",
+                Sort.by("name"),
+                0,
+                10,
+                spec -> spec.and((root, query, cb) -> cb.lessThan(root.get("price"), 100)));
+
+        assertThat(result.totalElements()).isEqualTo(2);
+        assertThat(result.content().stream().map(TestEntity::getName).toList()).containsExactly("Novel", "Textbook");
+    }
+
+    // --- Fluent query builder ---
+
+    @Test
+    void query_withRepository_shouldReturnResults() {
+        var result = executor.<TestEntity, Long>query(TestEntity.class)
+                .repository(testEntityRepository)
+                .filter("")
+                .sort(Sort.by("name"))
+                .page(0, 3)
+                .execute();
+
+        assertThat(result.content()).hasSize(3);
+        assertThat(result.totalElements()).isEqualTo(5);
+        assertThat(result.content().stream().map(TestEntity::getName).toList())
+                .containsExactly("Laptop", "Novel", "Phone");
+    }
+
+    @Test
+    void query_withHydrator_shouldReturnResults() {
+        var result = executor.<TestEntity, Long>query(TestEntity.class)
+                .hydrator(testEntityRepository::findAllWithCategoryByIdIn)
+                .filter("category.name==Electronics")
+                .sort(Sort.by("name"))
+                .page(0, 10)
+                .execute();
+
+        assertThat(result.totalElements()).isEqualTo(3);
+        assertThat(result.content().get(0).getCategory().getName()).isEqualTo("Electronics");
+    }
+
+    @Test
+    void query_withSpecCustomizer_shouldFilterResults() {
+        var result = executor.<TestEntity, Long>query(TestEntity.class)
+                .repository(testEntityRepository)
+                .filter("price>100")
+                .sort(Sort.by("name"))
+                .page(0, 10)
+                .spec(s -> s.and((root, query, cb) -> cb.notEqual(root.get("name"), "Phone")))
+                .execute();
+
+        assertThat(result.totalElements()).isEqualTo(2);
+        assertThat(result.content().stream().map(TestEntity::getName).toList()).containsExactly("Laptop", "Tablet");
+    }
+
+    @Test
+    void query_withoutHydrator_shouldThrow() {
+        var q = executor.<TestEntity, Long>query(TestEntity.class)
+                .filter("")
+                .sort(Sort.by("name"))
+                .page(0, 10);
+
+        assertThatThrownBy(q::execute)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("No hydrator set");
+    }
+
+    @Test
+    void query_withDefaults_shouldWork() {
+        var result = executor.<TestEntity, Long>query(TestEntity.class)
+                .repository(testEntityRepository)
+                .execute();
+
+        assertThat(result.totalElements()).isEqualTo(5);
+        assertThat(result.page()).isZero();
+    }
+
     // --- Hydrator returning duplicate entities should keep first occurrence ---
 
     @Test
