@@ -1,0 +1,9 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: rsqlpaging
+      POSTGRES_USER: rsqlpaging
+      POSTGRES_PASSWORD: rsqlpaging
+    ports:
+      - "5433:5432"
