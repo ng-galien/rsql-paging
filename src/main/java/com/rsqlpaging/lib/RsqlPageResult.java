@@ -3,14 +3,7 @@ package com.rsqlpaging.lib;
 import java.util.List;
 
 public record RsqlPageResult<T>(
-        List<T> content,
-        int page,
-        int size,
-        long totalElements,
-        int totalPages,
-        boolean first,
-        boolean last
-) {
+        List<T> content, int page, int size, long totalElements, int totalPages, boolean first, boolean last) {
 
     public RsqlPageResult {
         if (page < 0) throw new IllegalArgumentException("page must be >= 0");

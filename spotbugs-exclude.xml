@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- EntityManager is injected by Spring — not a mutable exposure -->
+    <Match>
+        <Class name="com.rsqlpaging.lib.RsqlPagingExecutor"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+</FindBugsFilter>

@@ -30,12 +30,6 @@ public class ProductController {
             Sort sort) {
 
         return rsqlPagingExecutor.findPage(
-                productRepository::findAllWithCategoryByIdIn,
-                Product.class,
-                filter,
-                sort,
-                page,
-                size
-        );
+                productRepository::findAllWithCategoryByIdIn, Product.class, filter, sort, page, size);
     }
 }

@@ -1,12 +1,14 @@
-package com.rsqlpaging.demo.entity;
+package com.rsqlpaging.lib;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 @Entity
-public class Category {
+@Table(name = "test_category")
+public class TestCategory {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -14,9 +16,9 @@ public class Category {
 
     private String name;
 
-    protected Category() {}
+    public TestCategory() {}
 
-    public Category(String name) {
+    public TestCategory(String name) {
         this.name = name;
     }
 
@@ -24,7 +26,15 @@ public class Category {
         return id;
     }
 
+    public void setId(Long id) {
+        this.id = id;
+    }
+
     public String getName() {
         return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 }

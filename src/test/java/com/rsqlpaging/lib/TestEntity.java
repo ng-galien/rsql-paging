@@ -1,4 +1,4 @@
-package com.rsqlpaging.demo.entity;
+package com.rsqlpaging.lib;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -6,10 +6,11 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
-import java.math.BigDecimal;
+import jakarta.persistence.Table;
 
 @Entity
-public class Product {
+@Table(name = "test_entity")
+public class TestEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -17,14 +18,14 @@ public class Product {
 
     private String name;
 
-    private BigDecimal price;
+    private int price;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    private Category category;
+    private TestCategory category;
 
-    protected Product() {}
+    public TestEntity() {}
 
-    public Product(String name, BigDecimal price, Category category) {
+    public TestEntity(String name, int price, TestCategory category) {
         this.name = name;
         this.price = price;
         this.category = category;
@@ -34,15 +35,31 @@ public class Product {
         return id;
     }
 
+    public void setId(Long id) {
+        this.id = id;
+    }
+
     public String getName() {
         return name;
     }
 
-    public BigDecimal getPrice() {
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public int getPrice() {
         return price;
     }
 
-    public Category getCategory() {
+    public void setPrice(int price) {
+        this.price = price;
+    }
+
+    public TestCategory getCategory() {
         return category;
+    }
+
+    public void setCategory(TestCategory category) {
+        this.category = category;
     }
 }
