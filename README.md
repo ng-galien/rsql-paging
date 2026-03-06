@@ -1,5 +1,6 @@
 # rsql-paging
 
+[![JitPack](https://jitpack.io/v/ng-galien/rsql-paging.svg)](https://jitpack.io/#ng-galien/rsql-paging)
 [![CI](https://github.com/ng-galien/rsql-paging/actions/workflows/ci.yml/badge.svg)](https://github.com/ng-galien/rsql-paging/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](rsql-paging-lib/pom.xml)
 [![Java](https://img.shields.io/badge/Java-21-blue)](https://adoptium.net/)
