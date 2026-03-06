@@ -1,10 +1,10 @@
-# Guide d'intégration par copie
+# Integration guide (copy-based)
 
-Ce guide explique comment intégrer la lib rsql-paging dans un projet Spring Boot 3 existant en copiant directement les fichiers source.
+This guide explains how to integrate the rsql-paging library into an existing Spring Boot 3 project by copying the source files directly.
 
-## 1. Dépendance Maven
+## 1. Maven dependency
 
-Ajouter la dépendance rsql-jpa-specification dans le `pom.xml` du projet cible :
+Add the rsql-jpa-specification dependency to the target project's `pom.xml`:
 
 ```xml
 <dependency>
@@ -14,47 +14,48 @@ Ajouter la dépendance rsql-jpa-specification dans le `pom.xml` du projet cible 
 </dependency>
 ```
 
-Le projet doit déjà avoir `spring-boot-starter-data-jpa` et `spring-boot-starter-web`.
+The project must already have `spring-boot-starter-data-jpa` and `spring-boot-starter-web`.
 
-## 2. Copier les fichiers de la lib
+## 2. Copy the library files
 
-Copier les 4 fichiers du package `com.rsqlpaging.lib` dans le projet cible, en adaptant le package :
+Copy the 5 files from the `com.rsqlpaging.lib` package into the target project, adapting the package name:
 
 ```
 src/main/java/com/rsqlpaging/lib/
-├── RsqlPagingExecutor.java         # Le coeur — pagination 3 étapes
-├── RsqlPageResult.java             # Record de résultat
-├── RsqlPagingAutoConfiguration.java # Auto-configuration Spring Boot
-└── RsqlPagingExceptionHandler.java  # Gestion d'erreurs → 400 ProblemDetail
+├── RsqlPagingExecutor.java          # Core — 3-step pagination
+├── RsqlPageResult.java              # Result record
+├── RsqlPagingProperties.java        # Configuration (max-id-count)
+├── RsqlPagingAutoConfiguration.java # Spring Boot auto-configuration
+└── RsqlPagingExceptionHandler.java  # Error handling → ProblemDetail
 ```
 
-### Adapter le package
+### Adapt the package
 
-Renommer le package dans les 4 fichiers. Par exemple, pour un projet `com.monprojet` :
+Rename the package in all files. For example, for a project `com.myproject`:
 
 ```
-com.rsqlpaging.lib → com.monprojet.rsqlpaging
+com.rsqlpaging.lib → com.myproject.rsqlpaging
 ```
 
-### Enregistrer l'auto-configuration
+### Register auto-configuration
 
-Créer (ou compléter) le fichier :
+Create (or update) the file:
 
 ```
 src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
 ```
 
-Avec :
+With:
 
 ```
-com.monprojet.rsqlpaging.RsqlPagingAutoConfiguration
+com.myproject.rsqlpaging.RsqlPagingAutoConfiguration
 ```
 
-> **Alternative** : si le package est déjà scanné par `@SpringBootApplication`, on peut simplement ajouter `@Configuration` sur `RsqlPagingAutoConfiguration` et supprimer le fichier `AutoConfiguration.imports`.
+> **Alternative**: if the package is already scanned by `@SpringBootApplication`, you can simply add `@Configuration` to `RsqlPagingAutoConfiguration` and remove the `AutoConfiguration.imports` file.
 
-## 3. Créer la méthode d'hydratation dans le repository
+## 3. Create the hydration method in the repository
 
-Pour chaque entité paginée, ajouter une méthode avec `LEFT JOIN FETCH` sur les associations lazy :
+For each paginated entity, add a method with `LEFT JOIN FETCH` on lazy associations:
 
 ```java
 public interface OrderRepository extends JpaRepository<Order, Long> {
@@ -67,12 +68,12 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 }
 ```
 
-**Points importants :**
-- Toujours utiliser `LEFT JOIN FETCH` (pas `JOIN FETCH`) pour ne pas exclure les entités avec des relations nulles
-- Fetcher toutes les associations qui seront sérialisées en JSON
-- Si `open-in-view: false` (recommandé), toute association lazy non fetchée provoquera une `LazyInitializationException`
+**Important notes:**
+- Always use `LEFT JOIN FETCH` (not `JOIN FETCH`) to avoid excluding entities with null relationships
+- Fetch all associations that will be serialized to JSON
+- If `open-in-view: false` (recommended), any unfetched lazy association will cause a `LazyInitializationException`
 
-## 4. Utiliser dans un controller
+## 4. Use in a controller
 
 ```java
 @RestController
@@ -106,42 +107,51 @@ public class OrderController {
 }
 ```
 
-### Exemple d'appel
+### Example request
 
 ```
 GET /api/orders?filter=customer.name==Dupont;status==PAID&sort=createdAt,desc&page=0&size=10
 ```
 
-## 5. Comportements automatiques
+## 5. Automatic behaviors
 
-| Comportement | Détail |
+| Behavior | Detail |
 |---|---|
-| **Sort par défaut** | Si aucun `sort` n'est fourni, tri automatique sur l'`@Id` de l'entité |
-| **Validation du tri** | Les propriétés de tri sont vérifiées contre le metamodel JPA. Propriété inexistante → 400 |
-| **Validation page/size** | `page < 0` ou `size < 1` → 400 |
-| **RSQL invalide** | Filtre malformé → 400 avec message ProblemDetail |
-| **Déduplication** | Les IDs dupliqués (joins dans le filtre RSQL) sont dédupliqués en Java |
-| **Réordonnancement** | Les entités hydratées sont réordonnées pour respecter le tri demandé |
+| **Default sort** | If no `sort` is provided, automatically sorts by the entity's `@Id` field |
+| **Sort validation** | Sort properties are validated against the JPA metamodel. Unknown property → 400 |
+| **Page/size validation** | `page < 0` or `size < 1` → 400 |
+| **Invalid RSQL** | Malformed filter → 400 with ProblemDetail message |
+| **Deduplication** | Duplicate IDs (from joins in the RSQL filter) are deduplicated in Java |
+| **Reordering** | Hydrated entities are reordered to match the requested sort |
+| **Hard limit** | Default 1M IDs max. Beyond that → 413 Payload Too Large. Configurable via `rsql.paging.max-id-count` |
 
-## 6. Configuration recommandée
+## 6. Configuration
 
 ```yaml
 spring:
   jpa:
-    open-in-view: false    # Obligatoire pour éviter les fuites de session
+    open-in-view: false    # Required to avoid session leaks
+
+rsql:
+  paging:
+    max-id-count: 1000000  # Max IDs loaded into memory (default: 1M)
 ```
+
+The ID query uses `setMaxResults(maxIdCount + 1)` on the SQL side to never load more than necessary from the database. If the filter returns more IDs than the limit, the query fails immediately with a **413 Payload Too Large** and the message:
+
+> Query returned more than 1000000 IDs. Narrow your filter or increase rsql.paging.max-id-count.
 
 ## 7. Limitations
 
-- **Clés composites** : `@IdClass` et `@EmbeddedId` ne sont pas supportés. L'entité doit avoir un seul champ `@Id`.
-- **Volume** : tous les IDs matchant le filtre sont chargés en mémoire. Adapté pour des tables jusqu'à quelques centaines de milliers de lignes. Au-delà, envisager du keyset pagination.
-- **Collections fetchées** : si l'hydratation utilise `JOIN FETCH` sur une `@OneToMany`, Hibernate peut retourner des doublons. Utiliser `DISTINCT` dans la requête JPQL ou `@EntityGraph` à la place.
+- **Composite keys**: `@IdClass` and `@EmbeddedId` are not supported. The entity must have a single `@Id` field.
+- **Volume**: all IDs matching the filter are loaded into memory. Suitable for tables up to a few hundred thousand rows. Beyond that, consider keyset pagination.
+- **Fetched collections**: if the hydration uses `JOIN FETCH` on a `@OneToMany`, Hibernate may return duplicates. Use `DISTINCT` in the JPQL query or `@EntityGraph` instead.
 
-## Checklist d'intégration
+## Integration checklist
 
-- [ ] Dépendance `rsql-jpa-spring-boot-starter` ajoutée au pom.xml
-- [ ] 4 fichiers de la lib copiés avec le bon package
-- [ ] Auto-configuration enregistrée (imports ou @Configuration)
-- [ ] Méthode d'hydratation avec `LEFT JOIN FETCH` dans le repository
-- [ ] Controller utilisant `rsqlPagingExecutor.findPage(...)`
-- [ ] `open-in-view: false` dans application.yml
+- [ ] `rsql-jpa-spring-boot-starter` dependency added to pom.xml
+- [ ] 5 library files copied with the correct package
+- [ ] Auto-configuration registered (imports or @Configuration)
+- [ ] Hydration method with `LEFT JOIN FETCH` in the repository
+- [ ] Controller using `rsqlPagingExecutor.findPage(...)`
+- [ ] `open-in-view: false` in application.yml
