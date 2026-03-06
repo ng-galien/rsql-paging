@@ -22,7 +22,7 @@ In your project's `pom.xml`:
     <dependency>
         <groupId>com.github.ng-galien.rsql-paging</groupId>
         <artifactId>rsql-paging</artifactId>
-        <version>v0.4.1</version>
+        <version>v0.4.2</version>
     </dependency>
 </dependencies>
 ```
@@ -69,7 +69,7 @@ In your project's `pom.xml`:
     <dependency>
         <groupId>io.github.nggalien</groupId>
         <artifactId>rsql-paging</artifactId>
-        <version>0.4.1</version>
+        <version>0.4.2</version>
     </dependency>
 </dependencies>
 ```
