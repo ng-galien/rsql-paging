@@ -30,6 +30,7 @@ public class RsqlPagingExecutor {
     private static final int DEFAULT_MAX_ID_COUNT = 1_000_000;
 
     private final EntityManager entityManager;
+    private final jakarta.persistence.PersistenceUnitUtil persistenceUnitUtil;
     private final int maxIdCount;
 
     public RsqlPagingExecutor(EntityManager entityManager) {
@@ -38,6 +39,7 @@ public class RsqlPagingExecutor {
 
     public RsqlPagingExecutor(EntityManager entityManager, int maxIdCount) {
         this.entityManager = entityManager;
+        this.persistenceUnitUtil = entityManager.getEntityManagerFactory().getPersistenceUnitUtil();
         this.maxIdCount = maxIdCount;
     }
 
@@ -122,7 +124,7 @@ public class RsqlPagingExecutor {
         var effectiveSort = (sort == null || sort.isUnsorted()) ? Sort.by(idFieldName) : sort;
         validateSortProperties(entityClass, effectiveSort);
 
-        List<ID> allIds = fetchIds(entityClass, rsqlFilter, effectiveSort, specCustomizer, rsqlCustomizer);
+        List<ID> allIds = fetchIds(entityClass, idFieldName, rsqlFilter, effectiveSort, specCustomizer, rsqlCustomizer);
 
         var total = allIds.size();
         var fromIndex = (int) Math.min((long) page * size, total);
@@ -174,6 +176,7 @@ public class RsqlPagingExecutor {
     @SuppressWarnings("unchecked")
     private <T, ID> List<ID> fetchIds(
             Class<T> entityClass,
+            String idFieldName,
             String rsqlFilter,
             Sort sort,
             UnaryOperator<Specification<T>> specCustomizer,
@@ -182,9 +185,8 @@ public class RsqlPagingExecutor {
         var query = cb.createQuery(Object.class);
         var root = query.from(entityClass);
 
-        query.select(root.get(resolveIdFieldName(entityClass)));
+        query.select(root.get(idFieldName));
 
-        // Apply RSQL filter + custom specification
         Specification<T> spec = Specification.where(null);
         if (rsqlFilter != null && !rsqlFilter.isBlank()) {
             if (rsqlCustomizer != null) {
@@ -201,7 +203,6 @@ public class RsqlPagingExecutor {
             query.where(predicate);
         }
 
-        // Apply sorting — sort is always present thanks to the fallback in findPage
         var orders = sort.stream()
                 .map(order -> order.isAscending()
                         ? cb.asc(resolvePath(root, order.getProperty()))
@@ -236,9 +237,9 @@ public class RsqlPagingExecutor {
     }
 
     private <T, ID> List<T> reorder(List<T> entities, List<ID> orderedIds) {
-        var util = entityManager.getEntityManagerFactory().getPersistenceUnitUtil();
         var byId = entities.stream()
-                .collect(Collectors.toMap(util::getIdentifier, Function.identity(), (a, b) -> a, LinkedHashMap::new));
+                .collect(Collectors.toMap(
+                        persistenceUnitUtil::getIdentifier, Function.identity(), (a, b) -> a, LinkedHashMap::new));
         return orderedIds.stream().map(byId::get).filter(Objects::nonNull).toList();
     }
 }

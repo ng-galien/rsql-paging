@@ -8,7 +8,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import jakarta.persistence.EntityManager;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -309,7 +312,7 @@ class RsqlPagingExecutorTest {
                 ids -> ids.stream()
                         .limit(ids.size() - 1L)
                         .map(id -> testEntityRepository.findById(id).orElse(null))
-                        .filter(java.util.Objects::nonNull)
+                        .filter(Objects::nonNull)
                         .toList(),
                 TestEntity.class,
                 "",
@@ -518,7 +521,7 @@ class RsqlPagingExecutorTest {
                 .filter("price>100")
                 .sort(Sort.by("name"))
                 .page(0, 10)
-                .rsql(qb -> qb.propertyBlacklist(java.util.Map.of(TestEntity.class, java.util.List.of("price"))));
+                .rsql(qb -> qb.propertyBlacklist(Map.of(TestEntity.class, List.of("price"))));
 
         assertThatThrownBy(q::execute).isInstanceOf(Exception.class);
     }
@@ -530,7 +533,7 @@ class RsqlPagingExecutorTest {
                 .filter("name==Laptop")
                 .sort(Sort.by("name"))
                 .page(0, 10)
-                .rsql(qb -> qb.propertyWhitelist(java.util.Map.of(TestEntity.class, java.util.List.of("name"))))
+                .rsql(qb -> qb.propertyWhitelist(Map.of(TestEntity.class, List.of("name"))))
                 .execute();
 
         assertThat(result.totalElements()).isEqualTo(1);
@@ -544,7 +547,7 @@ class RsqlPagingExecutorTest {
                 .filter("price>100")
                 .sort(Sort.by("name"))
                 .page(0, 10)
-                .rsql(qb -> qb.propertyWhitelist(java.util.Map.of(TestEntity.class, java.util.List.of("name"))));
+                .rsql(qb -> qb.propertyWhitelist(Map.of(TestEntity.class, List.of("name"))));
 
         assertThatThrownBy(q::execute).isInstanceOf(Exception.class);
     }
@@ -553,7 +556,7 @@ class RsqlPagingExecutorTest {
     void query_withRsqlCustomizerAndNoFilter_shouldWork() {
         var result = executor.<TestEntity, Long>query(TestEntity.class)
                 .repository(testEntityRepository)
-                .rsql(qb -> qb.propertyBlacklist(java.util.Map.of(TestEntity.class, java.util.List.of("price"))))
+                .rsql(qb -> qb.propertyBlacklist(Map.of(TestEntity.class, List.of("price"))))
                 .execute();
 
         assertThat(result.totalElements()).isEqualTo(5);
@@ -567,7 +570,7 @@ class RsqlPagingExecutorTest {
                 ids -> {
                     var entities = testEntityRepository.findAllById(ids);
                     // Return duplicates by adding the list to itself
-                    var doubled = new java.util.ArrayList<>(entities);
+                    var doubled = new ArrayList<>(entities);
                     doubled.addAll(entities);
                     return doubled;
                 },
