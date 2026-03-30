@@ -601,17 +601,18 @@ class RsqlPagingExecutorTest {
     }
 
     @Test
-    void query_withLimitExceeded_shouldThrow() {
-        var q = executor.<TestEntity, Long>query(TestEntity.class)
+    void query_withLimitExceeded_shouldTruncateResults() {
+        var result = executor.<TestEntity, Long>query(TestEntity.class)
                 .repository(testEntityRepository)
                 .sort(Sort.by("name"))
                 .page(0, 10)
-                .limit(3);
+                .limit(3)
+                .execute();
 
-        // 5 entities exist, limit is 3 → should throw
-        assertThatThrownBy(q::execute)
-                .isInstanceOf(RsqlResultTooLargeException.class)
-                .hasMessageContaining("more than 3 IDs");
+        // 5 entities exist, limit is 3 → truncated to first 3 by sort order
+        assertThat(result.totalElements()).isEqualTo(3);
+        assertThat(result.content().stream().map(TestEntity::getName).toList())
+                .containsExactly("Laptop", "Novel", "Phone");
     }
 
     @Test

@@ -117,13 +117,13 @@ public class RsqlPagingExecutor {
             Consumer<QuerySupport.QuerySupportBuilder> rsqlCustomizer) {
 
         validatePageArgs(page, size, limit);
-        var effectiveLimit = limit > 0 ? limit : maxIdCount;
         var idFieldName = resolveIdFieldName(entityClass);
         var effectiveSort = (sort == null || sort.isUnsorted()) ? Sort.by(idFieldName) : sort;
         validateSortProperties(entityClass, effectiveSort);
 
+        var fetchLimit = limit > 0 ? limit : maxIdCount;
         List<ID> allIds = fetchIds(
-                entityClass, idFieldName, rsqlFilter, effectiveSort, effectiveLimit, specCustomizer, rsqlCustomizer);
+                entityClass, idFieldName, rsqlFilter, effectiveSort, fetchLimit, specCustomizer, rsqlCustomizer);
 
         var total = allIds.size();
         var fromIndex = (int) Math.min((long) page * size, total);
@@ -214,7 +214,7 @@ public class RsqlPagingExecutor {
             String idFieldName,
             String rsqlFilter,
             Sort sort,
-            int effectiveLimit,
+            int fetchLimit,
             UnaryOperator<Specification<T>> specCustomizer,
             Consumer<QuerySupport.QuerySupportBuilder> rsqlCustomizer) {
         var cb = entityManager.getCriteriaBuilder();
@@ -246,19 +246,24 @@ public class RsqlPagingExecutor {
                 .toList();
         query.orderBy(orders);
 
-        // Hard limit to prevent OOM on large tables
+        // Fetch one more than the hard limit to detect overflow
         var jpaQuery = entityManager.createQuery(query);
-        jpaQuery.setMaxResults(effectiveLimit + 1);
+        jpaQuery.setMaxResults(maxIdCount + 1);
         var raw = jpaQuery.getResultList();
 
         // Java-side deduplication (DISTINCT + ORDER BY on non-selected columns is problematic in
         // SQL)
         var deduped = List.copyOf(new LinkedHashSet<>(raw));
 
-        if (deduped.size() > effectiveLimit) {
+        if (deduped.size() > maxIdCount) {
             throw new RsqlResultTooLargeException(
-                    "Query returned more than %d IDs. Narrow your filter or increase the limit."
-                            .formatted(effectiveLimit));
+                    "Query returned more than %d IDs. Narrow your filter or increase rsql.paging.max-id-count."
+                            .formatted(maxIdCount));
+        }
+
+        // Apply user-defined limit (soft cap, no exception)
+        if (deduped.size() > fetchLimit) {
+            return (List<ID>) (List<?>) deduped.subList(0, fetchLimit);
         }
 
         return (List<ID>) (List<?>) deduped;
