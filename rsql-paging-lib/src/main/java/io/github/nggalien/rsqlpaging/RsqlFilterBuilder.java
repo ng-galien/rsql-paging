@@ -105,11 +105,7 @@ public final class RsqlFilterBuilder {
 
     /** Maps a comma-separated param to =in=(...) on a different field. */
     public RsqlFilterBuilder in(String param, String field) {
-        var value = params.get(param);
-        if (value != null && !value.isBlank()) {
-            clauses.add("%s=in=(%s)".formatted(field, value));
-        }
-        return this;
+        return listOp(param, field, "=in=");
     }
 
     /** Maps a comma-separated param to =out=(...) on same-named field. */
@@ -119,11 +115,7 @@ public final class RsqlFilterBuilder {
 
     /** Maps a comma-separated param to =out=(...) on a different field. */
     public RsqlFilterBuilder out(String param, String field) {
-        var value = params.get(param);
-        if (value != null && !value.isBlank()) {
-            clauses.add("%s=out=(%s)".formatted(field, value));
-        }
-        return this;
+        return listOp(param, field, "=out=");
     }
 
     /** Maps param to a wildcard search ==*value* on same-named field. */
@@ -135,7 +127,7 @@ public final class RsqlFilterBuilder {
     public RsqlFilterBuilder like(String param, String field) {
         var value = params.get(param);
         if (value != null && !value.isBlank()) {
-            clauses.add("%s==*%s*".formatted(field, value));
+            clauses.add("%s==*%s*".formatted(field, escapeRsql(value.strip())));
         }
         return this;
     }
@@ -151,7 +143,7 @@ public final class RsqlFilterBuilder {
     private RsqlFilterBuilder op(String param, String field, String operator) {
         var value = params.get(param);
         if (value != null && !value.isBlank()) {
-            clauses.add("%s%s%s".formatted(field, operator, value));
+            clauses.add("%s%s%s".formatted(field, operator, escapeRsql(value.strip())));
         }
         return this;
     }
@@ -159,6 +151,32 @@ public final class RsqlFilterBuilder {
     /** Builds the RSQL filter string by joining all clauses with AND (;). */
     public String build() {
         return String.join(";", clauses);
+    }
+
+    private RsqlFilterBuilder listOp(String param, String field, String operator) {
+        var value = params.get(param);
+        if (value != null && !value.isBlank()) {
+            clauses.add("%s%s(%s)".formatted(field, operator, escapeRsqlList(value)));
+        }
+        return this;
+    }
+
+    private static String escapeRsqlList(String value) {
+        return Stream.of(value.split(",", -1))
+                .map(item -> escapeRsql(item.strip()))
+                .collect(Collectors.joining(","));
+    }
+
+    private static String escapeRsql(String value) {
+        var sb = new StringBuilder(value.length());
+        for (var i = 0; i < value.length(); i++) {
+            var ch = value.charAt(i);
+            if (ch == '"' || ch == '\'' || ch == '(' || ch == ')' || ch == ';' || ch == ',') {
+                sb.append('\\');
+            }
+            sb.append(ch);
+        }
+        return sb.toString();
     }
 
     /**

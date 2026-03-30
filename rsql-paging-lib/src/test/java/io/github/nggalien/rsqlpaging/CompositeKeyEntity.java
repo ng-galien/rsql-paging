@@ -23,6 +23,7 @@ public class CompositeKeyEntity {
 
     private String description;
 
+    @SuppressWarnings("serial")
     public static class CompositeKey implements Serializable {
         private Long partA;
         private Long partB;

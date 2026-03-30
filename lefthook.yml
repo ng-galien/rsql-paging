@@ -1,0 +1,23 @@
+pre-commit:
+  commands:
+    spotless-format:
+      glob: "*.java"
+      run: >
+        mvn spotless:apply -q -pl rsql-paging-lib
+        && git diff --name-only --diff-filter=M -- '*.java' | xargs git add
+      stage_fixed: true
+
+    checkstyle:
+      glob: "*.java"
+      run: mvn checkstyle:check -q -pl rsql-paging-lib
+      parallel: true
+
+    pmd:
+      glob: "*.java"
+      run: mvn pmd:check -q -pl rsql-paging-lib
+      parallel: true
+
+    spotbugs:
+      glob: "*.java"
+      run: mvn compile -q -pl rsql-paging-lib && mvn spotbugs:check -q -pl rsql-paging-lib
+      parallel: true

@@ -8,11 +8,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "rsql.paging")
 public record RsqlPagingProperties(int maxIdCount) {
-    private static final int DEFAULT_MAX_ID_COUNT = 1_000_000;
+    static final int DEFAULT_MAX_ID_COUNT = 1_000_000;
 
     public RsqlPagingProperties {
         if (maxIdCount <= 0) {
-            maxIdCount = DEFAULT_MAX_ID_COUNT;
+            throw new IllegalArgumentException("rsql.paging.max-id-count must be > 0, got: " + maxIdCount);
         }
     }
 

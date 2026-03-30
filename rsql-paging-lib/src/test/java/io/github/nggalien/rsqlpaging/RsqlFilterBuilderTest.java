@@ -230,6 +230,58 @@ class RsqlFilterBuilderTest {
         assertThat(filter).isEmpty();
     }
 
+    // --- RSQL injection prevention ---
+
+    @Test
+    void eq_withSemicolon_shouldEscapeValue() {
+        var filter =
+                RsqlFilterBuilder.from(Map.of("name", "x;price<0")).eq("name").build();
+
+        assertThat(filter).isEqualTo("name==x\\;price<0");
+    }
+
+    @Test
+    void like_withSpecialChars_shouldEscapeValue() {
+        var filter = RsqlFilterBuilder.from(Map.of("search", "foo(bar)"))
+                .like("search", "name")
+                .build();
+
+        assertThat(filter).isEqualTo("name==*foo\\(bar\\)*");
+    }
+
+    @Test
+    void eq_withQuotes_shouldEscapeValue() {
+        var filter = RsqlFilterBuilder.from(Map.of("name", "it's \"quoted\""))
+                .eq("name")
+                .build();
+
+        assertThat(filter).isEqualTo("name==it\\'s \\\"quoted\\\"");
+    }
+
+    @Test
+    void eq_withComma_shouldEscapeValue() {
+        var filter = RsqlFilterBuilder.from(Map.of("name", "a,b")).eq("name").build();
+
+        assertThat(filter).isEqualTo("name==a\\,b");
+    }
+
+    @Test
+    void op_shouldStripWhitespace() {
+        var filter =
+                RsqlFilterBuilder.from(Map.of("name", "  laptop  ")).eq("name").build();
+
+        assertThat(filter).isEqualTo("name==laptop");
+    }
+
+    @Test
+    void like_shouldStripWhitespace() {
+        var filter = RsqlFilterBuilder.from(Map.of("search", "  laptop  "))
+                .like("search", "name")
+                .build();
+
+        assertThat(filter).isEqualTo("name==*laptop*");
+    }
+
     // --- raw ---
 
     @Test

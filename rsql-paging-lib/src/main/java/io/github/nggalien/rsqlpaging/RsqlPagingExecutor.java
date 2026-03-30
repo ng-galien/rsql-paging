@@ -9,6 +9,7 @@ import io.github.perplexhub.rsql.RSQLJPASupport;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.metamodel.ManagedType;
 import jakarta.persistence.metamodel.SingularAttribute;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -17,6 +18,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,14 +29,14 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public class RsqlPagingExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(RsqlPagingExecutor.class);
-    private static final int DEFAULT_MAX_ID_COUNT = 1_000_000;
+    private static final Pattern DOT = Pattern.compile("\\.");
 
     private final EntityManager entityManager;
     private final jakarta.persistence.PersistenceUnitUtil persistenceUnitUtil;
     private final int maxIdCount;
 
     public RsqlPagingExecutor(EntityManager entityManager) {
-        this(entityManager, DEFAULT_MAX_ID_COUNT);
+        this(entityManager, RsqlPagingProperties.DEFAULT_MAX_ID_COUNT);
     }
 
     public RsqlPagingExecutor(EntityManager entityManager, int maxIdCount) {
@@ -99,10 +101,10 @@ public class RsqlPagingExecutor {
             int size,
             UnaryOperator<Specification<T>> specCustomizer) {
 
-        return executePage(hydrator, entityClass, rsqlFilter, sort, page, size, specCustomizer, null);
+        return executePage(hydrator, entityClass, rsqlFilter, sort, page, size, 0, specCustomizer, null);
     }
 
-    /** Package-private entry point used by RsqlPageQuery to pass all options including rsqlCustomizer. */
+    /** Package-private entry point used by RsqlPageQuery to pass all options. */
     <T, ID> RsqlPageResult<T> executePage(
             Function<List<ID>, List<T>> hydrator,
             Class<T> entityClass,
@@ -110,21 +112,18 @@ public class RsqlPagingExecutor {
             Sort sort,
             int page,
             int size,
+            int limit,
             UnaryOperator<Specification<T>> specCustomizer,
             Consumer<QuerySupport.QuerySupportBuilder> rsqlCustomizer) {
 
-        if (page < 0) {
-            throw new IllegalArgumentException("page must be >= 0, got: " + page);
-        }
-        if (size < 1) {
-            throw new IllegalArgumentException("size must be >= 1, got: " + size);
-        }
-
+        validatePageArgs(page, size, limit);
+        var effectiveLimit = limit > 0 ? limit : maxIdCount;
         var idFieldName = resolveIdFieldName(entityClass);
         var effectiveSort = (sort == null || sort.isUnsorted()) ? Sort.by(idFieldName) : sort;
         validateSortProperties(entityClass, effectiveSort);
 
-        List<ID> allIds = fetchIds(entityClass, idFieldName, rsqlFilter, effectiveSort, specCustomizer, rsqlCustomizer);
+        List<ID> allIds = fetchIds(
+                entityClass, idFieldName, rsqlFilter, effectiveSort, effectiveLimit, specCustomizer, rsqlCustomizer);
 
         var total = allIds.size();
         var fromIndex = (int) Math.min((long) page * size, total);
@@ -157,20 +156,56 @@ public class RsqlPagingExecutor {
         return entityType.getId(entityType.getIdType().getJavaType()).getName();
     }
 
-    private <T> void validateSortProperties(Class<T> entityClass, Sort sort) {
-        var entityType = entityManager.getMetamodel().entity(entityClass);
-        var attributeNames = entityType.getSingularAttributes().stream()
-                .map(SingularAttribute::getName)
-                .collect(Collectors.toUnmodifiableSet());
+    private void validatePageArgs(int page, int size, int limit) {
+        if (page < 0) {
+            throw new IllegalArgumentException("page must be >= 0, got: " + page);
+        }
+        if (size < 1) {
+            throw new IllegalArgumentException("size must be >= 1, got: " + size);
+        }
+        if (limit < 0) {
+            throw new IllegalArgumentException("limit must be >= 0, got: " + limit);
+        }
+        if (limit > maxIdCount) {
+            throw new IllegalArgumentException("limit (%d) must be <= max-id-count (%d)".formatted(limit, maxIdCount));
+        }
+    }
 
-        sort.forEach(order -> {
+    private <T> void validateSortProperties(Class<T> entityClass, Sort sort) {
+        var metamodel = entityManager.getMetamodel();
+        for (var order : sort) {
             var property = order.getProperty();
-            var rootProperty = property.contains(".") ? property.substring(0, property.indexOf('.')) : property;
-            if (!attributeNames.contains(rootProperty)) {
-                throw new IllegalArgumentException(
-                        "Invalid sort property: '%s'. Available properties: %s".formatted(property, attributeNames));
+            ManagedType<?> type = metamodel.entity(entityClass);
+            for (var segment : DOT.split(property)) {
+                var attr = findAttribute(type, property, segment);
+                if (!(attr instanceof SingularAttribute<?, ?> singular)) {
+                    throw new IllegalArgumentException(
+                            "Invalid sort property: '%s'. '%s' is a collection attribute of %s and cannot be used for sorting."
+                                    .formatted(
+                                            property,
+                                            segment,
+                                            type.getJavaType().getSimpleName()));
+                }
+                if (singular.isAssociation()) {
+                    type = metamodel.entity(singular.getJavaType());
+                }
             }
-        });
+        }
+    }
+
+    private static jakarta.persistence.metamodel.Attribute<?, ?> findAttribute(
+            ManagedType<?> type, String property, String segment) {
+        try {
+            return type.getAttribute(segment);
+        } catch (IllegalArgumentException ex) {
+            var available = type.getSingularAttributes().stream()
+                    .map(SingularAttribute::getName)
+                    .collect(Collectors.toUnmodifiableSet());
+            throw new IllegalArgumentException(
+                    "Invalid sort property: '%s'. '%s' is not a known attribute of %s. Available: %s"
+                            .formatted(property, segment, type.getJavaType().getSimpleName(), available),
+                    ex);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -179,6 +214,7 @@ public class RsqlPagingExecutor {
             String idFieldName,
             String rsqlFilter,
             Sort sort,
+            int effectiveLimit,
             UnaryOperator<Specification<T>> specCustomizer,
             Consumer<QuerySupport.QuerySupportBuilder> rsqlCustomizer) {
         var cb = entityManager.getCriteriaBuilder();
@@ -187,7 +223,7 @@ public class RsqlPagingExecutor {
 
         query.select(root.get(idFieldName));
 
-        Specification<T> spec = Specification.where(null);
+        Specification<T> spec = Specification.unrestricted();
         if (rsqlFilter != null && !rsqlFilter.isBlank()) {
             if (rsqlCustomizer != null) {
                 var qb = QuerySupport.builder().rsqlQuery(rsqlFilter);
@@ -212,17 +248,17 @@ public class RsqlPagingExecutor {
 
         // Hard limit to prevent OOM on large tables
         var jpaQuery = entityManager.createQuery(query);
-        jpaQuery.setMaxResults(maxIdCount + 1);
+        jpaQuery.setMaxResults(effectiveLimit + 1);
         var raw = jpaQuery.getResultList();
 
         // Java-side deduplication (DISTINCT + ORDER BY on non-selected columns is problematic in
         // SQL)
-        var deduped = new LinkedHashSet<>(raw).stream().toList();
+        var deduped = List.copyOf(new LinkedHashSet<>(raw));
 
-        if (deduped.size() > maxIdCount) {
-            throw new IllegalStateException(
-                    "Query returned more than %d IDs. Narrow your filter or increase rsql.paging.max-id-count."
-                            .formatted(maxIdCount));
+        if (deduped.size() > effectiveLimit) {
+            throw new RsqlResultTooLargeException(
+                    "Query returned more than %d IDs. Narrow your filter or increase the limit."
+                            .formatted(effectiveLimit));
         }
 
         return (List<ID>) (List<?>) deduped;
@@ -230,7 +266,7 @@ public class RsqlPagingExecutor {
 
     private <T> Path<?> resolvePath(Root<T> root, String property) {
         Path<?> path = root;
-        for (var segment : property.split("\\.")) {
+        for (var segment : DOT.split(property)) {
             path = path.get(segment);
         }
         return path;

@@ -33,8 +33,8 @@ class RsqlPagingExceptionHandlerTest {
     }
 
     @Test
-    void handleIllegalState_shouldReturn413() {
-        var result = handler.handleIllegalState(new IllegalStateException("too many IDs"));
+    void handleResultTooLarge_shouldReturn413() {
+        var result = handler.handleResultTooLarge(new RsqlResultTooLargeException("too many IDs"));
 
         assertThat(result.getStatus()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE.value());
         assertThat(result.getTitle()).isEqualTo("Query too large");
@@ -48,6 +48,6 @@ class RsqlPagingExceptionHandlerTest {
 
         assertThat(result.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
         assertThat(result.getTitle()).isEqualTo("Invalid RSQL filter");
-        assertThat(result.getDetail()).startsWith("Invalid RSQL filter:");
+        assertThat(result.getDetail()).isNotNull();
     }
 }

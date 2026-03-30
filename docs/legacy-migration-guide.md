@@ -32,7 +32,7 @@ public Page<Product> findProducts(
         @RequestParam(required = false, defaultValue = "asc") String sortDir,
         Pageable pageable) {
 
-    Specification<Product> spec = Specification.where(null);
+    Specification<Product> spec = Specification.unrestricted();
     if (status != null) {
         spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), status));
     }

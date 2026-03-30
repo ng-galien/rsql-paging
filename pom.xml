@@ -54,6 +54,18 @@
 
     <build>
         <plugins>
+            <!-- Compiler — fail on deprecation and other warnings -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <compilerArgs>
+                        <arg>-Xlint:all</arg>
+                        <arg>-Werror</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+
             <!-- Spotless — code formatting (Palantir Java Format) -->
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>

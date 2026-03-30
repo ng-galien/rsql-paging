@@ -185,12 +185,33 @@ class RsqlPagingExecutorTest {
     }
 
     @Test
-    void findPage_withNestedSortProperty_shouldValidateRootOnly() {
-        // category.name — root "category" is a valid attribute
+    void findPage_withNestedSortProperty_shouldValidateAllSegments() {
         var result = executor.findPage(
                 testEntityRepository::findAllWithCategoryByIdIn, TestEntity.class, "", Sort.by("category.name"), 0, 10);
 
         assertThat(result.totalElements()).isEqualTo(5);
+    }
+
+    @Test
+    void findPage_withCollectionSortProperty_shouldThrow() {
+        assertThatThrownBy(() ->
+                        executor.findPage(testCategoryRepository, TestCategory.class, "", Sort.by("entities"), 0, 10))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("collection attribute");
+    }
+
+    @Test
+    void findPage_withInvalidNestedSortProperty_shouldThrow() {
+        assertThatThrownBy(() -> executor.findPage(
+                        testEntityRepository::findAllWithCategoryByIdIn,
+                        TestEntity.class,
+                        "",
+                        Sort.by("category.nonExistent"),
+                        0,
+                        10))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("nonExistent")
+                .hasMessageContaining("TestCategory");
     }
 
     // --- Input validation ---
@@ -245,7 +266,7 @@ class RsqlPagingExecutorTest {
 
         assertThatThrownBy(() ->
                         limitedExecutor.findPage(testEntityRepository, TestEntity.class, "", Sort.by("name"), 0, 10))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(RsqlResultTooLargeException.class)
                 .hasMessageContaining("more than 3 IDs");
     }
 
@@ -557,6 +578,72 @@ class RsqlPagingExecutorTest {
         var result = executor.<TestEntity, Long>query(TestEntity.class)
                 .repository(testEntityRepository)
                 .rsql(qb -> qb.propertyBlacklist(Map.of(TestEntity.class, List.of("price"))))
+                .execute();
+
+        assertThat(result.totalElements()).isEqualTo(5);
+    }
+
+    // --- Limit ---
+
+    @Test
+    void query_withLimit_shouldCapResults() {
+        var result = executor.<TestEntity, Long>query(TestEntity.class)
+                .repository(testEntityRepository)
+                .filter("price>100")
+                .sort(Sort.by("name"))
+                .page(0, 10)
+                .limit(3)
+                .execute();
+
+        assertThat(result.totalElements()).isEqualTo(3);
+        assertThat(result.content().stream().map(TestEntity::getName).toList())
+                .containsExactly("Laptop", "Phone", "Tablet");
+    }
+
+    @Test
+    void query_withLimitExceeded_shouldThrow() {
+        var q = executor.<TestEntity, Long>query(TestEntity.class)
+                .repository(testEntityRepository)
+                .sort(Sort.by("name"))
+                .page(0, 10)
+                .limit(3);
+
+        // 5 entities exist, limit is 3 → should throw
+        assertThatThrownBy(q::execute)
+                .isInstanceOf(RsqlResultTooLargeException.class)
+                .hasMessageContaining("more than 3 IDs");
+    }
+
+    @Test
+    void query_withLimitAboveHardLimit_shouldThrow() {
+        var limitedExecutor = new RsqlPagingExecutor(entityManager, 10);
+
+        var q = limitedExecutor
+                .<TestEntity, Long>query(TestEntity.class)
+                .repository(testEntityRepository)
+                .limit(20);
+
+        assertThatThrownBy(q::execute)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must be <= max-id-count");
+    }
+
+    @Test
+    void query_withNegativeLimit_shouldThrow() {
+        var q = executor.<TestEntity, Long>query(TestEntity.class)
+                .repository(testEntityRepository)
+                .limit(-1);
+
+        assertThatThrownBy(q::execute)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("limit must be >= 0");
+    }
+
+    @Test
+    void query_withZeroLimit_shouldUseHardLimit() {
+        var result = executor.<TestEntity, Long>query(TestEntity.class)
+                .repository(testEntityRepository)
+                .sort(Sort.by("name"))
                 .execute();
 
         assertThat(result.totalElements()).isEqualTo(5);

@@ -5,6 +5,7 @@
 package io.github.nggalien.rsqlpaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
 
@@ -23,14 +24,16 @@ class RsqlPagingPropertiesTest {
     }
 
     @Test
-    void zeroValue_shouldFallbackToDefault() {
-        var props = new RsqlPagingProperties(0);
-        assertThat(props.maxIdCount()).isEqualTo(1_000_000);
+    void zeroValue_shouldThrow() {
+        assertThatThrownBy(() -> new RsqlPagingProperties(0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must be > 0");
     }
 
     @Test
-    void negativeValue_shouldFallbackToDefault() {
-        var props = new RsqlPagingProperties(-1);
-        assertThat(props.maxIdCount()).isEqualTo(1_000_000);
+    void negativeValue_shouldThrow() {
+        assertThatThrownBy(() -> new RsqlPagingProperties(-1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must be > 0");
     }
 }

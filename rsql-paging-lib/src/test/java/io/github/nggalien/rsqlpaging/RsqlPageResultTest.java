@@ -64,6 +64,13 @@ class RsqlPageResultTest {
     }
 
     @Test
+    void constructor_shouldRejectNullContent() {
+        assertThatThrownBy(() -> RsqlPageResult.of(null, 0, 10, 0))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("content must not be null");
+    }
+
+    @Test
     void constructor_shouldRejectNegativePage() {
         assertThatThrownBy(() -> RsqlPageResult.of(List.of(), -1, 10, 0))
                 .isInstanceOf(IllegalArgumentException.class)

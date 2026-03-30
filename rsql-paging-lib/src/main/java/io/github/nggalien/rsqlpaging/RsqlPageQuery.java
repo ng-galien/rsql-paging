@@ -34,6 +34,7 @@ public final class RsqlPageQuery<T, ID> {
     private Sort sort;
     private int page;
     private int size = 20;
+    private int limit;
     private UnaryOperator<Specification<T>> specCustomizer = UnaryOperator.identity();
     private Consumer<QuerySupport.QuerySupportBuilder> rsqlCustomizer;
     private Function<List<ID>, List<T>> hydrator;
@@ -59,6 +60,12 @@ public final class RsqlPageQuery<T, ID> {
     public RsqlPageQuery<T, ID> page(int pageNumber, int pageSize) {
         this.page = pageNumber;
         this.size = pageSize;
+        return this;
+    }
+
+    /** Limit the maximum number of IDs fetched. Must be &lt;= the hard limit (rsql.paging.max-id-count). */
+    public RsqlPageQuery<T, ID> limit(int maxIds) {
+        this.limit = maxIds;
         return this;
     }
 
@@ -91,6 +98,7 @@ public final class RsqlPageQuery<T, ID> {
         if (hydrator == null) {
             throw new IllegalStateException("No hydrator set. Call hydrator() or repository() before execute().");
         }
-        return executor.executePage(hydrator, entityClass, filter, sort, page, size, specCustomizer, rsqlCustomizer);
+        return executor.executePage(
+                hydrator, entityClass, filter, sort, page, size, limit, specCustomizer, rsqlCustomizer);
     }
 }

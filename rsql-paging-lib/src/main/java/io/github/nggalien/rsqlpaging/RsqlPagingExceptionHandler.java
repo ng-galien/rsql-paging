@@ -23,14 +23,14 @@ public class RsqlPagingExceptionHandler {
         return problemDetail("Unsupported operation", ex.getMessage());
     }
 
-    @ExceptionHandler(IllegalStateException.class)
-    public ProblemDetail handleIllegalState(IllegalStateException ex) {
+    @ExceptionHandler(RsqlResultTooLargeException.class)
+    public ProblemDetail handleResultTooLarge(RsqlResultTooLargeException ex) {
         return problemDetail("Query too large", ex.getMessage(), HttpStatus.PAYLOAD_TOO_LARGE);
     }
 
     @ExceptionHandler(RSQLParserException.class)
     public ProblemDetail handleRsqlParseError(RSQLParserException ex) {
-        return problemDetail("Invalid RSQL filter", "Invalid RSQL filter: " + ex.getMessage());
+        return problemDetail("Invalid RSQL filter", ex.getMessage());
     }
 
     private static ProblemDetail problemDetail(String title, String detail) {
